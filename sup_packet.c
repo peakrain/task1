@@ -34,9 +34,9 @@ int is_same(Socket *socket1,Socket *socket2)
 	else
 		return 0;
 }
-int analysis(LNode **list,struct pcap_pkthdr *pkt,const u_char *packet)
+int analysis(LNode *list,struct pcap_pkthdr *pkt,const u_char *packet)
 {
-	LNode *p=*list;
+	LNode *p=list;
 	int offset=14;
 	int len=pkt->len;
 	if(len>offset)
@@ -60,22 +60,6 @@ int analysis(LNode **list,struct pcap_pkthdr *pkt,const u_char *packet)
 			socket->src_port=ntohs(tcp_h->source);
 			socket->dst_port=ntohs(tcp_h->dest);
 			
-			if(len<=0)
-				return 1;
-			if(ListLength(p)!=0)
-			{
-				while(p->next!=NULL)
-				{
-					p=p->next;
-					if(is_same(p->data.socket,socket))
-					{
-						int dev=(ntohl(tcp_h->seq)-p->data.syn_seq)+(ntohl(tcp_h->ack_seq)-p->data.syn_ack);
-						memcpy(p->data.payload+dev,packet+offset,len);
-						p->data.len+=len;
-						return 0;
-					}
-				}
-			}
 			packet_info element;
 			packet_info_init(&element);
 			socket_copy(element.socket,socket);
@@ -83,8 +67,6 @@ int analysis(LNode **list,struct pcap_pkthdr *pkt,const u_char *packet)
 			element.syn_ack=ntohl(tcp_h->ack_seq);
 			memcpy(element.payload,packet+offset,len);
 			element.len=len;
-			if(ListInsert(&p,element)==0)
-				printf("Insert length:%d\n",ListLength(p));
 		}
 		else
 			return EOF;
@@ -95,9 +77,8 @@ int analysis(LNode **list,struct pcap_pkthdr *pkt,const u_char *packet)
 		printf("packet length error!\n");
 		return EOF;
 	}
-	*list=p;
 }
-int get_packet(int num,char *filter,LNode **list,char *filename)
+int get_packet(int num,char *filter,LNode *list,char *filename)
 {
 	char ebuf[PCAP_ERRBUF_SIZE];
 	/*open a pcap file*/
@@ -167,39 +148,19 @@ void packet_info_free(packet_info *info)
 		free(info->payload);
 	free(info);
 }
-int InitList(LNode* *L)
+int InitList(LNode *L,int capacity)
 {
-	LNode *l=(LNode *)malloc(sizeof(LNode));
-	if(!l)
+	L->data=(packet_info *)malloc(capacity*sizeof(packet_info));
+	if(!L->data)
 		return EOF;
-	l->next=NULL;
-	*L=l;
+	L->capacity=capacity;
+	L->n=0;
 	return 0;
 }
-int ListInsert(LNode* *L,packet_info e)
+int ListInsert(LNode *L,packet_info e)
 {
-	LNode *head,*p;
-	head=*L;
-	p=head;
-	while(p->next!=NULL)
-		p=p->next;
-	LNode *s=(LNode *)malloc(sizeof(LNode));
-	if(!s)
-		return EOF;
-	s->data=e;
-	s->next=p->next;
-	p->next=s;
-	*L=head;
+	packet_info *p=&(L->data[L->n]);
+	*p=e;
+	L->n++;
 	return 0;
-}
-int ListLength(LNode *L)
-{
-	LNode *p=L;
-	int length=0;
-	while(p->next!=NULL)
-	{
-		length++;
-		p=p->next;
-	}
-	return length;
 }

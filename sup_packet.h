@@ -27,15 +27,15 @@ typedef struct{
 typedef struct node{
 	int capacity;
 	int n; 
-	packet_info data;
+	packet_info *data;
 }LNode;
 
 int  packet_info_init(packet_info *info);
 //void packet_info_free(packet_info *info);
-int InitList(LNode* *L);
-int ListInsert(LNode* *L,packet_info e);
+int InitList(LNode *L,int capacity);
+int ListInsert(LNode *L,packet_info e);
 
 int is_same(Socket *socket1,Socket *socket2);
 void socket_copy(Socket *socket1,Socket *socket2);
-int get_packet(int num,char *filter,LNode **list,char *filename);
+int get_packet(int num,char *filter,LNode *list,char *filename);
 #endif
