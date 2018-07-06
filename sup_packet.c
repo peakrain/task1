@@ -6,7 +6,7 @@
 #include<string.h>
 #include<malloc.h>
 #include<pcap.h>
-
+#include<stdlib.h>
 int count=0;
 void  socket_copy(Socket *socket1,Socket *socket2)
 {
@@ -60,6 +60,19 @@ int analysis(LNode *list,struct pcap_pkthdr *pkt,const u_char *packet)
 			socket->src_port=ntohs(tcp_h->source);
 			socket->dst_port=ntohs(tcp_h->dest);
 			
+			if(len<=0)
+				return 1;
+			int i;
+			for(i=0;i<p->n;i++)
+			{
+				if(is_same(p->data[i].socket,socket))
+				{
+					int dev=(ntohl(tcp_h->seq)-p->data[i].syn_seq)+(ntohl(tcp_h->ack_seq)-p->data[i].syn_ack);
+					memcpy(p->data[i].payload+dev,packet+offset,len);
+					p->data[i].len+=len;
+					return 2;
+				}
+			}
 			packet_info element;
 			packet_info_init(&element);
 			socket_copy(element.socket,socket);
@@ -67,6 +80,8 @@ int analysis(LNode *list,struct pcap_pkthdr *pkt,const u_char *packet)
 			element.syn_ack=ntohl(tcp_h->ack_seq);
 			memcpy(element.payload,packet+offset,len);
 			element.len=len;
+			ListInsert(p,element);
+			
 		}
 		else
 			return EOF;
@@ -159,6 +174,14 @@ int InitList(LNode *L,int capacity)
 }
 int ListInsert(LNode *L,packet_info e)
 {
+	if(L->n>=L->capacity)
+	{
+		packet_info *temp=(packet_info *)realloc(L->data,(L->capacity+64)*sizeof(packet_info));
+		if(temp==NULL)
+			return EOF;
+		L->data=temp;
+		L->capacity+=64;
+	}
 	packet_info *p=&(L->data[L->n]);
 	*p=e;
 	L->n++;

@@ -31,7 +31,6 @@ typedef struct node{
 }LNode;
 
 int  packet_info_init(packet_info *info);
-//void packet_info_free(packet_info *info);
 int InitList(LNode *L,int capacity);
 int ListInsert(LNode *L,packet_info e);
 

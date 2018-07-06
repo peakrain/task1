@@ -4,8 +4,9 @@
 #include<string.h>
 #include<malloc.h>
 #define line_size 1024
-int request_parse(unsigned char *data)
+int request_parse(head_fields *fields,unsigned char *data)
 {
+	head_fields_reset(fields);
 	char ldata[line_size];
 	char type[10];
 	char uri[1024];
@@ -22,15 +23,16 @@ int request_parse(unsigned char *data)
 		if(sscanf(ldata,"%[^:]: %[^\n]",name,value)!=EOF)
 		{
 			printf("name:%s value:%s\n",name,value);
+			head_fields_set(fields,name,value);
+			memset(name,'\0',line_size);
+			memset(value,'\0',line_size);
 		}
 	}
 }
 
-int response_parse(response_field *field,unsigned char *data)
+int response_parse(head_fields *fields,unsigned char *data)
 {
-	memset(field->Content_Encoding,'\0',field_size);
-	memset(field->Transfer_Encoding,'\0',field_size);
-	field->Content_Length=-1;
+	head_fields_reset(fields);
 	char ldata[line_size];
 	char version[10];
 	char code[10];
@@ -47,19 +49,9 @@ int response_parse(response_field *field,unsigned char *data)
 		if(sscanf(ldata,"%[^:]: %[^\n]",name,value)!=EOF)
 		{
 			printf("name:%s value:%s\n",name,value);
-			if(strcmp(name,"Transfer-Encoding")==0)
-			{
-				strcpy(field->Transfer_Encoding,value);
-			}
-			if(strcmp(name,"Content-Encoding")==0)
-			{
-				strcpy(field->Content_Encoding,value);
-			}
-			if(strcmp(name,"Content-Length")==0)
-			{
-				field->Content_Length=atoi(value);
-			}
-				
+			head_fields_set(fields,name,value);
+			memset(name,'\0',line_size);
+			memset(value,'\0',line_size);
 		}
 	}	
 }
@@ -170,47 +162,60 @@ int tcp_stream_parse(unsigned char *payload,int payload_len)
 	unsigned char *p=payload;
 	int p_len=payload_len;
 	unsigned char data[p_len];
-	response_field field;
-	field.Content_Length=-1;
+	head_fields fields;
+	head_fields_reset(&fields);
+	int Content_Length=-1;
 	int state=0;//1代表请求　2代表响应
 	while(1)
 	{
 		memset(data,'\0',payload_len);
-		ret=auto_split(data,&len,&p,&p_len,field.Content_Length);
-		field.Content_Length=-1;
+		ret=auto_split(data,&len,&p,&p_len,fields.Content_Length);
+		fields.Content_Length=-1;
 		if(ret==EOF)
 			break;
 		if((strncmp(data,"GET",3)==0)||(strncmp(data,"POST",4)==0))
 		{
 			printf("请求头:\n");
-			request_parse(data);
+			request_parse(&fields,data);
 			printf("\n");
 			state=1;
 		}
 		else if(strncmp(data,"HTTP",4)==0)
 		{
 			printf("响应头:\n");
-			response_parse(&field,data);
+			response_parse(&fields,data);
 			printf("\n");
 			state=2;
 		}
 		else
 		{
+			if(state==1)
+			{
+				printf("请求体:\n");
+				printf("%s\n",data);
+				printf("\n");
+				state=0;
+			}
 			if(state==2)
 			{
 				printf("响应体:\n");
+				if(strcmp(fields.Content_Type,"image/jpeg")==0)
+				{
+					printf("photo.jpeg\n");
+					continue;
+				}
 				unsigned char chunk[len];
 				int clen=0;
-				if(strlen(field.Transfer_Encoding)!=0)
+				if(strlen(fields.Transfer_Encoding)!=0)
 				{
-					if(strcmp(field.Transfer_Encoding,"chunked")==0)
+					if(strcmp(fields.Transfer_Encoding,"chunked")==0)
 						join_chunk(chunk,&clen,data,len);
 				}
 				int glen=0;
 				unsigned char gzip[10*len];
-				if(strlen(field.Content_Encoding)!=0)
+				if(strlen(fields.Content_Encoding)!=0)
 				{
-					if(strcmp(field.Content_Encoding,"gzip")==0)
+					if(strcmp(fields.Content_Encoding,"gzip")==0)
 					{
 						glen=10*len;
 						if(clen!=0)
@@ -232,4 +237,40 @@ int tcp_stream_parse(unsigned char *payload,int payload_len)
 		}
 	}
 	return 0;
+}
+int head_fields_reset(head_fields *fields)
+{
+	memset(fields->Content_Encoding,'\0',field_size);
+	memset(fields->Connection,'\0',field_size);
+	memset(fields->Transfer_Encoding,'\0',field_size);
+	memset(fields->Content_Type,'\0',field_size);
+	memset(fields->Content_Language,'\0',field_size);
+	fields->Content_Length=-1;
+}
+int head_fields_set(head_fields *fields,char name[],char value[])
+{
+	if(strcmp(name,"Transfer-Encoding")==0)
+	{
+		strcpy(fields->Transfer_Encoding,value);
+	}
+	if(strcmp(name,"Content-Encoding")==0)
+	{
+		strcpy(fields->Content_Encoding,value);
+	}
+	if(strcmp(name,"Connection")==0)
+	{
+		strcpy(fields->Connection,value);
+	}
+	if(strcmp(name,"Content-Type")==0)
+	{
+		strcpy(fields->Content_Type,value);
+	}
+	if(strcmp(name,"Content-Language")==0)
+	{
+		strcpy(fields->Content_Language,value);
+	}
+	if(strcmp(name,"Content-Length")==0)
+	{
+		fields->Content_Length=atoi(value);
+	}
 }
